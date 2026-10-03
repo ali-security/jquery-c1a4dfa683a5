@@ -1,3 +1,24 @@
 language: node_js
+dist: focal
 node_js:
 - '0.10'
+addons:
+  apt:
+    packages:
+    # Web server for the QUnit suite and its PHP fixtures (test/data/*.php).
+    # php7.4-fpm is only a fallback for when phpenv's PHP ships no php-fpm.
+    - nginx
+    - php7.4-fpm
+before_script:
+- phantomjs --version
+- bash test/start-test-server.sh 8000
+script:
+# Builds dist/jquery.js + dist/jquery.min.js and lints (jsonlint, jshint, jscs, uglify, compare_size)
+- npm test
+# Full QUnit unit-test suite (all modules) against the freshly built dist/ (test/index.html default)
+# run-qunit.js exits 2 only when PhantomJS stalls before any test starts
+# (page load never completes); only that case is retried, any test failure exits 1.
+- (for i in 1 2 3; do OPENSSL_CONF=/dev/null QUNIT_VERBOSE=1 phantomjs test/run-qunit.js "http://127.0.0.1:8000/test/index.html" 540; rc=$?; if [ "$rc" -ne 2 ]; then break; fi; echo "PhantomJS stalled before QUnit started; retrying ($i/3)"; done; exit $rc)
+after_failure:
+- cat /tmp/jquery-test-server/php-fpm.log /tmp/jquery-test-server/nginx-error.log
+- tail -50 /tmp/jquery-test-server/*access*.log
